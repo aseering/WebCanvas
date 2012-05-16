@@ -102,7 +102,12 @@ function PointDrawQueue(ctxt) {
 jQuery(document).ready(function(){
     var canvas = $('#canvas').get(0);
     var ctxt = canvas.getContext("2d");
-    ctxt.fillStyle = "black";
+    ctxt.strokeStyle = 'black';
+    ctxt.lineWidth = 1;
+    ctxt.lineCap = "round";
+    ctxt.lineJoin = "round";
+    ctxt.shadowBlur = 3;
+    ctxt.shadowColor = 'black';
     ctxt.beginPath();
 
     var notepad_name;
