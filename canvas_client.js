@@ -10,6 +10,40 @@ function bezier_pts(P, tension) {
   return B;
 }
 
+function BatchPointSender(socket) {
+    var queue = [],
+        DELAY = 100,
+        timer = null;
+
+    return {
+	'sendPt': function(pt) {
+	    queue.push(pt);
+	    if (!timer) {
+		timer = setTimeout(function() {
+		    socket.emit('mousemove_send', queue);
+		    queue = [];
+		    timer = null;
+		}, DELAY);
+	    }
+	},
+
+	'sendMouseUp': function() {
+	    clearTimeout(timer);
+	    socket.emit('mousemove_send', queue);
+	    queue = [];
+	    timer = null;
+	},
+	    
+	'setRecvPtHandler': function(recvFn) {
+	    socket.on('mousemove_recv', function(user_id, other_q) {
+		for (var i = 0; i < other_q.length; i++) {
+		    recvFn(user_id, other_q[i]);
+		}
+	    })
+	}
+    };
+}
+
 function PointDrawQueue(ctxt) {
   return {
       _points: [],
@@ -65,6 +99,13 @@ jQuery(document).ready(function(){
     ctxt.fillStyle = "black";
     ctxt.beginPath();
 
+    var notepad_name;
+    if (window.location.pathname.substring(0,5) == "/pad/") {
+	notepad_name = window.location.pathname.substring(5);
+    } else {
+	notepad_name = window.location.pathname;
+    }
+
     var point_queues = {};
 
     var point_counter = 0;
@@ -73,6 +114,10 @@ jQuery(document).ready(function(){
     var mousedown = false;
     var curr_user_id = null;
     
+    var socket = io.connect("/");
+
+    var sender = BatchPointSender(socket);
+
     function draw_pt(user_id, pt) {
 	if (point_queues[user_id] == null) {
 	    point_queues[user_id] = PointDrawQueue(ctxt);
@@ -84,12 +129,11 @@ jQuery(document).ready(function(){
 	if (mousedown) {
 	    var data = {'x': evt.pageX - obj.offsetLeft,
 			'y': evt.pageY - obj.offsetLeft };
-	    socket.emit('mousemove_send',data);
+	    //socket.emit('mousemove_send',data);
+	    sender.sendPt(data);
 	    draw_pt(curr_user_id, data);
 	}
     }
-    
-    var socket = io.connect("/");
 
     function occasionally_flush_path() {
 	point_counter++;
@@ -100,7 +144,8 @@ jQuery(document).ready(function(){
 	}
     }
     
-    socket.on('mousemove_recv', function(user_id, data) { 
+//    socket.on('mousemove_recv', function(user_id, data) { 
+    sender.setRecvPtHandler(function(user_id, data) {
 	if (user_id == curr_user_id) { return; } 
 	draw_pt(user_id, data);
 	occasionally_flush_path();
@@ -120,18 +165,20 @@ jQuery(document).ready(function(){
     });
     
     socket.on('send_clear', function (user_id) {
-	ctxt.clearRect(0, 0, canvas.width, canvas.height);
 	ctxt.closePath();
 	ctxt.beginPath();
+	ctxt.clearRect(0, 0, canvas.width, canvas.height);
     });
     
     socket.on('send_pagedata', function(data) {
 	var ops = {
-	    'mousemove_recv': function(user_id, data) {
-		draw_pt(user_id, data);		
-		occasionally_flush_path();
+	    'm': function(user_id, data) {
+		for (var i = 0; i < data.length; i++) {
+		    draw_pt(user_id, data[i]);		
+		    occasionally_flush_path();
+		}
 	    },
-	    'mouseup_recv': function(user_id) {
+	    'u': function(user_id) {
 		if (!point_queues[user_id]) { return; }
 		point_queues[user_id].flush();
 		point_queues[user_id] = null;
@@ -140,19 +187,24 @@ jQuery(document).ready(function(){
 	    }
 	};
 
+	console.log(data);
+
 	var val, fn;
-	for (var x = 0; x < data.length; x++) {
-	    val = data[x];
+	// In reverse order, 'cause the server sez so
+	for (var x = data.length - 1; x >= 0; x--) {
+	    val = $.parseJSON(data[x]);
 	    try {
-		fn = ops[val['op']];
-		fn.apply(fn, val['args']);
+		fn = ops[val[0]];
+		fn.apply(fn, val.slice(1, val.length));
 	    } catch (err) { console.log(err); }
 	}
     });
 
-    // Go fetch our user ID
-    socket.emit('get_pagedata');
+    // Go set up our initial state
+    console.log(notepad_name);
+    socket.emit('set_notepad', notepad_name);
     socket.emit('get_userid');
+    socket.emit('get_pagedata');
     
     $('#canvas').mousedown(function(evt) {
 	socket.emit('mousedown_send');
@@ -177,6 +229,9 @@ jQuery(document).ready(function(){
     });
 
     $('#clear_btn').click(function(evt) {
+	ctxt.closePath();
+	ctxt.beginPath();
+	ctxt.clearRect(0, 0, canvas.width, canvas.height);
 	socket.emit('clear');
     });
 });
