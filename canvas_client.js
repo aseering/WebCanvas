@@ -30,6 +30,7 @@ function BatchPointSender(socket) {
 	'sendMouseUp': function() {
 	    clearTimeout(timer);
 	    socket.emit('mousemove_send', queue);
+	    socket.emit('mouseup_send');
 	    queue = [];
 	    timer = null;
 	},
@@ -40,7 +41,12 @@ function BatchPointSender(socket) {
 		    recvFn(user_id, other_q[i]);
 		}
 	    })
+	},
+
+	'setMouseUpHandler': function(upFn) {
+	    socket.on('mouseup_recv', upFn);
 	}
+
     };
 }
 
@@ -150,8 +156,8 @@ jQuery(document).ready(function(){
 	draw_pt(user_id, data);
 	occasionally_flush_path();
     });
-    
-    socket.on('mouseup_recv', function(user_id) {
+
+    sender.setMouseUpHandler(function(user_id) {
 	if (user_id == curr_user_id) { return; } 
 	if (!point_queues[user_id]) { return; }
 	point_queues[user_id].flush();
@@ -222,7 +228,7 @@ jQuery(document).ready(function(){
 	handleMouseCoord(evt, this);
 	point_queues[curr_user_id].flush();
 	point_queues[curr_user_id] = null;
-	socket.emit('mouseup_send');
+	sender.sendMouseUp();
 	mousedown = false;
 	ctxt.closePath();
 	ctxt.beginPath();
