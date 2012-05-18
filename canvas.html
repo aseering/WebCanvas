@@ -4,19 +4,24 @@
 <!-- Needed for HP TouchPad -->
 <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no, width=device-width">
 <meta name="format-detection" content="false">
+<!-- <script type="text/javascript" src="https://getfirebug.com/firebug-lite.js"></script> -->
 
 <title>Canvas Drawing</title>
 <script src="/socket.io/socket.io.js"></script>
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
-<script src="/jquery.ui.touch.js"></script>
-
-<script src="/canvas_client.js"></script>
+<script src="/js/jquery.ui.touch.js"></script>
+<script src="/js/pdf.js"></script>
+<script language="JavaScript">
+PDFJS.pdfBug=true;
+</script>
+<script src="/js/canvas_client.js"></script>
 
 </head>
 <body bgcolor="black">
 <canvas id="canvas" width="748" height="890"
   style="background-color: white;"></canvas>
 <br />
-<input type="button" id="clear_btn" value="Clear" />
+<div style="float: left;" id="clear_btn_div"><input type="button" id="clear_btn" value="Clear" /></div>
+<div style="float: right; display: none;" id="next_prev_div"><input type="button" id="prev_pg" value="Prev" /><input type="button" id="next_pg" value="Next" /></div>
 </body>
 </html>

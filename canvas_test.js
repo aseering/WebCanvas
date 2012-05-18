@@ -1,4 +1,5 @@
-var app = require('express').createServer(),
+var express = require('express'),
+app = express.createServer(),
 io = require('socket.io').listen(app, {log: false}),
 fs = require('fs'),
 redis = require('redis'),
@@ -16,13 +17,8 @@ app.get('/pad/:id', function(req, res) {
     res.sendfile(__dirname + '/canvas.html');
 });
 
-app.get('/jquery.ui.touch.js', function (req, res) {
-    res.sendfile(__dirname + '/jquery.ui.touch.js');
-});
-
-app.get('/canvas_client.js', function (req, res) {
-    res.sendfile(__dirname + '/canvas_client.js');
-});
+app.use('/js', express.static(__dirname + '/js'));
+app.use('/img', express.static(__dirname + '/img'));
 
 function Set(id_fn) {
     var set = {}

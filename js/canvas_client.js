@@ -1,4 +1,5 @@
 
+
 function add_p(a, b) { return { 'x': a.x + b.x, 'y': a.y + b.y }; }
 function sub_p(a, b) { return { 'x': a.x - b.x, 'y': a.y - b.y }; }
 function div_pc(a, c) { return { 'x': a.x / c, 'y': a.y / c }; }
@@ -102,13 +103,28 @@ function PointDrawQueue(ctxt) {
 jQuery(document).ready(function(){
     var canvas = $('#canvas').get(0);
     var ctxt = canvas.getContext("2d");
-    ctxt.strokeStyle = 'black';
-    ctxt.lineWidth = 1;
-    ctxt.lineCap = "round";
-    ctxt.lineJoin = "round";
-    ctxt.shadowBlur = 3;
-    ctxt.shadowColor = 'black';
-    ctxt.beginPath();
+    ctxt.save();
+
+    function setCanvas() {
+	ctxt.strokeStyle = 'blue';
+	ctxt.lineWidth = 1;
+	ctxt.lineCap = "round";
+	ctxt.lineJoin = "round";
+	ctxt.shadowBlur = 3;
+	ctxt.shadowColor = 'blue';
+	ctxt.beginPath();
+    }
+//    setCanvas();
+
+    // Just in case there's a background image
+    var bkgdImg = new Image();
+    var bkgdImgReady = false;
+    var pageData = null;
+
+    var pdfDoc = null;
+
+    bkgdImg.onload = function() { bkgdImgReady = true; redraw(); }
+    bkgdImg.onerror = function() { bkgdImgReady = true; redraw(); }
 
     var notepad_name;
     if (window.location.pathname.substring(0,5) == "/pad/") {
@@ -116,6 +132,29 @@ jQuery(document).ready(function(){
     } else {
 	notepad_name = window.location.pathname;
     }
+
+    var notepad_pagenum = null;
+    var next_page_uri = null;
+    var prev_page_uri = null;
+    var notepad_pagesep = notepad_name.lastIndexOf('-');
+    var notepad_padname = "";
+    if (notepad_pagesep != -1) {
+	notepad_pagenum = parseInt( notepad_name.slice( notepad_pagesep+1 ) );
+	notepad_padname = notepad_name.slice(0, notepad_pagesep);
+	next_page_uri = "/pad/" + notepad_padname + "-" + (notepad_pagenum+1);
+	prev_page_uri = "/pad/" + notepad_padname + "-" + (notepad_pagenum-1);
+    }
+
+    bkgdImg.src = "/img/" + notepad_name + ".png";
+
+    // Disable workers; feature not fully functional for now
+/*    PDFJS.disableWorker = true;
+    try {
+	PDFJS.getDocument("/img/" + notepad_padname + ".pdf").then(function(_pdfDoc) {
+	    pdfDoc = _pdfDoc;
+	    redraw();
+	});
+    } catch (exc) { console.log(exc); }*/
 
     var point_queues = {};
 
@@ -140,7 +179,6 @@ jQuery(document).ready(function(){
 	if (mousedown) {
 	    var data = {'x': evt.pageX - obj.offsetLeft,
 			'y': evt.pageY - obj.offsetLeft };
-	    //socket.emit('mousemove_send',data);
 	    sender.sendPt(data);
 	    draw_pt(curr_user_id, data);
 	}
@@ -155,7 +193,6 @@ jQuery(document).ready(function(){
 	}
     }
     
-//    socket.on('mousemove_recv', function(user_id, data) { 
     sender.setRecvPtHandler(function(user_id, data) {
 	if (user_id == curr_user_id) { return; } 
 	draw_pt(user_id, data);
@@ -179,9 +216,42 @@ jQuery(document).ready(function(){
 	ctxt.closePath();
 	ctxt.beginPath();
 	ctxt.clearRect(0, 0, canvas.width, canvas.height);
+	pageData = [];
+	redraw();
     });
     
     socket.on('send_pagedata', function(data) {
+	pageData = data;
+	redraw();
+    });
+
+
+    function redraw() {
+	// If we're still missing data, don't redraw yet
+	if (!bkgdImgReady || !pageData) { return; }
+
+	// Draw background image first
+	//bkgdImg.width = canvas.width;
+	//bkgdImg.height = canvas.height;
+//	if (bkgdImgReady) {
+	    // Default to the PNG if we have both
+	ctxt.drawImage(bkgdImg, 0, 0, canvas.width, canvas.height);
+	redraw_page();
+	    /*	} else {
+	    pdfDoc.getPage(notepad_pagenum).then(function(page) {
+		ctxt.closePath();
+		ctxt.restore();
+		page.render({canvasContext: ctxt, viewport: page.getViewport(1.1)}).then(function() {
+		    ctxt.save();
+		    ctxt.beginPath();
+		    setCanvas();
+		    redraw_page();
+		});
+	    });
+	}*/
+    }
+    function redraw_page() {
+	// Then draw page contents
 	var ops = {
 	    'm': function(user_id, data) {
 		for (var i = 0; i < data.length; i++) {
@@ -198,21 +268,18 @@ jQuery(document).ready(function(){
 	    }
 	};
 
-	console.log(data);
-
 	var val, fn;
 	// In reverse order, 'cause the server sez so
-	for (var x = data.length - 1; x >= 0; x--) {
-	    val = $.parseJSON(data[x]);
+	for (var x = pageData.length - 1; x >= 0; x--) {
+	    val = $.parseJSON(pageData[x]);
 	    try {
 		fn = ops[val[0]];
 		fn.apply(fn, val.slice(1, val.length));
 	    } catch (err) { console.log(err); }
 	}
-    });
+    }
 
     // Go set up our initial state
-    console.log(notepad_name);
     socket.emit('set_notepad', notepad_name);
     socket.emit('get_userid');
     socket.emit('get_pagedata');
@@ -245,4 +312,16 @@ jQuery(document).ready(function(){
 	ctxt.clearRect(0, 0, canvas.width, canvas.height);
 	socket.emit('clear');
     });
+
+    if (notepad_pagenum != null) {  // We have multiple pages; display next/prev
+	$('#next_prev_div').show();
+	if (notepad_pagenum > 0) {
+	    $('#prev_pg').click(function(evt) {
+		window.location.pathname = prev_page_uri;
+	    });
+	}
+	$('#next_pg').click(function(evt) {
+	    window.location.pathname = next_page_uri;
+	});
+    }
 });
