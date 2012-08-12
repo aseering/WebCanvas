@@ -11,6 +11,16 @@ function bezier_pts(P, tension) {
   return B;
 }
 
+function dataUrlToBinary(url) {
+    var regex = new RegExp("^data:image/([A-Za-z0-9]*);base64,(.*)$");
+    var data = regex.exec(url);
+    if (data) {
+	return {'type': data[1], 'data': atob(data[2])};
+    } else {
+	return null;
+    }
+}
+
 function BatchPointSender(socket) {
     var queue = [],
         DELAY = 100,
@@ -101,6 +111,9 @@ function PointDrawQueue(ctxt) {
 }
 
 jQuery(document).ready(function(){
+    var scratch_space = $('<div></div>').hide();
+    $('body').append(scratch_space);
+
     var canvas = $('#canvas').get(0);
     var ctxt = canvas.getContext("2d");
     ctxt.save();
@@ -114,21 +127,29 @@ jQuery(document).ready(function(){
 	ctxt.shadowColor = 'blue';
 	ctxt.beginPath();
     }
-//    setCanvas();
+    setCanvas();
 
     // Just in case there's a background image
     var bkgdImg = new Image();
     var bkgdImgReady = false;
+    var bkgdImgAvailable = false;
     var pageData = null;
 
     var pdfDoc = null;
 
-    bkgdImg.onload = function() { bkgdImgReady = true; redraw(); }
-    bkgdImg.onerror = function() { bkgdImgReady = true; redraw(); }
+    bkgdImg.onload = function() { bkgdImgReady = true; bkgdImgAvailable = true; redraw(); }
+    bkgdImg.onerror = function() { bkgdImgReady = true; bkgdImgAvailable = false; redraw(); }
 
     var notepad_name;
-    if (window.location.pathname.substring(0,5) == "/pad/") {
+    var fast_switching_enabled = false;
+    var notepad_root_path = "";
+    if (window.location.hash != "") {
+	notepad_name = window.location.hash.substring(1);
+	fast_switching_enabled = true;
+	notepad_root_path = "";
+    } else if (window.location.pathname.substring(0,5) == "/pad/") {
 	notepad_name = window.location.pathname.substring(5);
+	notepad_root_path = "/pad/";
     } else {
 	notepad_name = window.location.pathname;
     }
@@ -141,8 +162,8 @@ jQuery(document).ready(function(){
     if (notepad_pagesep != -1) {
 	notepad_pagenum = parseInt( notepad_name.slice( notepad_pagesep+1 ) );
 	notepad_padname = notepad_name.slice(0, notepad_pagesep);
-	next_page_uri = "/pad/" + notepad_padname + "-" + (notepad_pagenum+1);
-	prev_page_uri = "/pad/" + notepad_padname + "-" + (notepad_pagenum-1);
+	next_page_uri = notepad_root_path + notepad_padname + "-" + (notepad_pagenum+1);
+	prev_page_uri = notepad_root_path + notepad_padname + "-" + (notepad_pagenum-1);
     }
 
     bkgdImg.src = "/img/" + notepad_name + ".png";
@@ -167,6 +188,11 @@ jQuery(document).ready(function(){
     var socket = io.connect("/");
 
     var sender = BatchPointSender(socket);
+
+    function prefetchImg(url) {
+	var i = new Image();
+	i.src = url;
+    }
 
     function draw_pt(user_id, pt) {
 	if (point_queues[user_id] == null) {
@@ -225,6 +251,63 @@ jQuery(document).ready(function(){
 	redraw();
     });
 
+    function findDocumentSpan(padname, pagenum, cont) {
+	var curr_pagenum = pagenum;
+	var first_pagenum = null, last_pagenum = null;
+
+	// This is a slightly ridiculous approach.
+	// But we're going to have to do all this fetching anyway.
+	// Really hope the browser caches it...
+	var probeImg = new Image();
+
+	function mkUrl(name, num) { return "/img/" + name + "-" + num + ".png"; }
+
+	// Read back to the beginning
+	probeImg.onload = function(evt) {
+	    probeImg.src = mkUrl(padname, --curr_pagenum);
+	}
+	probeImg.onerror = function(evt) {
+	    // We found the beginning.  Now search forward.
+	    first_pagenum = curr_pagenum + 1;
+
+	    probeImg.onload = function(evt) {
+		probeImg.src = mkUrl(padname, ++curr_pagenum);
+	    }
+	    probeImg.onerror = function(evt) {
+		// Now we have the range of the document.
+		// Go do something with that info.
+		last_pagenum = curr_pagenum - 1;
+		cont(first_pagenum, last_pagenum);
+	    }
+
+	    curr_pagenum = pagenum;
+	    probeImg.src = mkUrl(padname, ++curr_pagenum);
+	}
+
+	probeImg.src = mkUrl(padname, --curr_pagenum);
+    }
+
+    function jumpPage(new_pagenum) {
+	notepad_pagenum = new_pagenum;
+	next_page_uri = notepad_root_path + notepad_padname + "-" + (notepad_pagenum+1);
+	prev_page_uri = notepad_root_path + notepad_padname + "-" + (notepad_pagenum-1);
+	var next = notepad_root_path + notepad_padname + "-" + (notepad_pagenum);
+	bkgdImgReady = false;
+	pageData = null;
+	clearCanvas(ctxt);
+	socket.emit('set_notepad', next);
+	bkgdImg.src = "/img/" + next + ".png";
+	prefetchImg("/img/" + prev_page_uri + ".png");
+	prefetchImg("/img/" + next_page_uri + ".png");
+	socket.emit('get_pagedata');
+	window.location.hash = next;
+    }
+
+    function clearCanvas(ctxt) {
+	ctxt.closePath();
+	ctxt.beginPath();
+	ctxt.clearRect(0, 0, canvas.width, canvas.height);
+    }
 
     function redraw() {
 	// If we're still missing data, don't redraw yet
@@ -235,7 +318,9 @@ jQuery(document).ready(function(){
 	//bkgdImg.height = canvas.height;
 //	if (bkgdImgReady) {
 	    // Default to the PNG if we have both
-	ctxt.drawImage(bkgdImg, 0, 0, canvas.width, canvas.height);
+	if (bkgdImgAvailable) {
+	    ctxt.drawImage(bkgdImg, 0, 0, canvas.width, canvas.height);
+	}
 	redraw_page();
 	    /*	} else {
 	    pdfDoc.getPage(notepad_pagenum).then(function(page) {
@@ -277,7 +362,11 @@ jQuery(document).ready(function(){
 		fn.apply(fn, val.slice(1, val.length));
 	    } catch (err) { console.log(err); }
 	}
+
+	if (onredrawfinished) onredrawfinished();
     }
+
+    var onredrawfinished = null;
 
     // Go set up our initial state
     socket.emit('set_notepad', notepad_name);
@@ -307,21 +396,52 @@ jQuery(document).ready(function(){
     });
 
     $('#clear_btn').click(function(evt) {
-	ctxt.closePath();
-	ctxt.beginPath();
-	ctxt.clearRect(0, 0, canvas.width, canvas.height);
+	clearCanvas(ctxt);
 	socket.emit('clear');
     });
 
+    $('#dl_img').click(function(evt) {
+	//document.location.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+	$('<iframe></iframe>').src = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream"); 
+    });
+
+    $('#dl_all').click(function(evt) {
+	if (!confirm("Are you sure you want to download the whole document?  It could get EXCITING!")) { return; }
+	findDocumentSpan(notepad_padname, notepad_pagenum, function(first_pg, last_pg) {
+	    var curr_pg = first_pg;
+	    onredrawfinished = function() {
+		if (curr_pg > last_pg) { 
+		    onredrawfinished = null; 
+		    jumpPage(first_pg);
+		} else {
+		    var tmp_iframe = $('<iframe></iframe>');
+		    scratch_space.append(tmp_iframe);
+		    tmp_iframe.attr('onload', function(evt) { setTimeout(60000, $(this).remove); });
+		    tmp_iframe.attr('src', canvas.toDataURL("image/png").replace("image/png", "image/octet-stream"));
+		    jumpPage(++curr_pg);
+		}
+	    };
+	    jumpPage(curr_pg);
+	});
+    });
+
     if (notepad_pagenum != null) {  // We have multiple pages; display next/prev
-	$('#next_prev_div').show();
-	if (notepad_pagenum > 0) {
-	    $('#prev_pg').click(function(evt) {
-		window.location.pathname = prev_page_uri;
-	    });
-	}
+	$('.next_prev').show();
+	$('#prev_pg').click(function(evt) {
+	    if (notepad_pagenum > 0) {
+		if (fast_switching_enabled) {
+		    jumpPage(notepad_pagenum-1);
+		} else {
+		    window.location.pathname = prev_page_uri;
+		}
+	    }
+	});
 	$('#next_pg').click(function(evt) {
-	    window.location.pathname = next_page_uri;
+	    if (fast_switching_enabled) {
+		jumpPage(notepad_pagenum+1);
+	    } else {
+		window.location.pathname = next_page_uri;
+	    }
 	});
     }
 });

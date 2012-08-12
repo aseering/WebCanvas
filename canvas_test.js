@@ -13,6 +13,10 @@ app.get('/', function (req, res) {
     res.sendfile(__dirname + '/index.html');
 });
 
+app.get('/pad/', function(req, res) {
+    res.sendfile(__dirname + '/canvas.html');
+});
+
 app.get('/pad/:id', function(req, res) {
     res.sendfile(__dirname + '/canvas.html');
 });
