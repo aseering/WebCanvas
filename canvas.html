@@ -18,10 +18,18 @@ PDFJS.pdfBug=true;
 
 </head>
 <body bgcolor="black">
-<canvas id="canvas" width="748" height="890"
-  style="background-color: white;"></canvas>
+<canvas id="canvas" width="850" height="110" style="background-color: white;"></canvas>
 <br />
+<div id="toolbar">
 <div style="float: left;" id="clear_btn_div"><input type="button" id="clear_btn" value="Clear" /></div>
-<div style="float: right;"><input type="button" id="dl_img" value="Download" /><span style="display: none;" class="next_prev"><input type="button" id="dl_all" value="Download All" /><input type="button" id="prev_pg" value="Prev" /><input type="button" id="next_pg" value="Next" /></style></div>
+<div style="float: right;">
+  <input type="button" id="dl_img" value="Download" />
+  <span style="display: none;" class="next_prev">
+    <input type="button" id="dl_all" value="Download All" />
+    <input type="button" id="prev_pg" value="Prev" />
+    <input type="button" id="next_pg" value="Next" />
+  </style>
+</div>
+</div>
 </body>
 </html>

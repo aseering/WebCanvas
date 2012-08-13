@@ -110,24 +110,59 @@ function PointDrawQueue(ctxt) {
   };
 }
 
+// Keep the canvas sized to the screen
+function resize_canvas(common_ctxt) {
+    var toolbar_height = 30;  // Arbitrary buffer for drawing the toolbar
+
+    var raw_width=850;
+    var raw_height=1100;
+    
+    var docOffset = $('body').offset();
+    console.log(docOffset);
+
+    var window_width=window.innerWidth - docOffset.left*2;
+    var window_height=window.innerHeight - toolbar_height - docOffset.top*2;
+    
+    var width_ratio = window_width/raw_width;
+    var height_ratio = window_height/raw_height;
+    
+    var ratio = Math.min(width_ratio, height_ratio);
+    
+    var new_width = raw_width * ratio;
+    var new_height = raw_height * ratio;
+    
+    $('#canvas').attr({ width: new_width, height: new_height });
+    $('#toolbar').width(new_width);
+    if (common_ctxt) common_ctxt.scale(ratio, ratio);
+
+    return ratio;
+}
+
+function setCanvas(ctxt) {
+    ctxt.strokeStyle = 'blue';
+    ctxt.lineWidth = 1;
+    ctxt.lineCap = "round";
+    ctxt.lineJoin = "round";
+    ctxt.shadowBlur = 3;
+    ctxt.shadowColor = 'blue';
+    ctxt.beginPath();
+}
+
 jQuery(document).ready(function(){
+
+    var RAW_CANVAS_WIDTH=850;
+    var RAW_CANVAS_HEIGHT=1100;
+
+    var curr_scale = 1.0;
+
     var scratch_space = $('<div></div>').hide();
     $('body').append(scratch_space);
 
     var canvas = $('#canvas').get(0);
     var ctxt = canvas.getContext("2d");
     ctxt.save();
-
-    function setCanvas() {
-	ctxt.strokeStyle = 'blue';
-	ctxt.lineWidth = 1;
-	ctxt.lineCap = "round";
-	ctxt.lineJoin = "round";
-	ctxt.shadowBlur = 3;
-	ctxt.shadowColor = 'blue';
-	ctxt.beginPath();
-    }
-    setCanvas();
+    curr_scale = resize_canvas(ctxt);
+    setCanvas(ctxt);
 
     // Just in case there's a background image
     var bkgdImg = new Image();
@@ -203,8 +238,8 @@ jQuery(document).ready(function(){
     
     function handleMouseCoord(evt, obj) {
 	if (mousedown) {
-	    var data = {'x': evt.pageX - obj.offsetLeft,
-			'y': evt.pageY - obj.offsetLeft };
+	    var data = {'x': (evt.pageX - obj.offsetLeft) / curr_scale,
+			'y': (evt.pageY - obj.offsetLeft) / curr_scale };
 	    sender.sendPt(data);
 	    draw_pt(curr_user_id, data);
 	}
@@ -241,7 +276,7 @@ jQuery(document).ready(function(){
     socket.on('send_clear', function (user_id) {
 	ctxt.closePath();
 	ctxt.beginPath();
-	ctxt.clearRect(0, 0, canvas.width, canvas.height);
+	ctxt.clearRect(0, 0, canvas.width/curr_scale, canvas.height/curr_scale);
 	pageData = [];
 	redraw();
     });
@@ -401,8 +436,8 @@ jQuery(document).ready(function(){
     });
 
     $('#dl_img').click(function(evt) {
-	//document.location.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
-	$('<iframe></iframe>').src = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream"); 
+	document.location.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+	//$('<iframe></iframe>').src = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream"); 
     });
 
     $('#dl_all').click(function(evt) {
@@ -444,4 +479,9 @@ jQuery(document).ready(function(){
 	    }
 	});
     }
+
+    $(window).resize(function() { curr_scale = resize_canvas(ctxt); setCanvas(ctxt); redraw(); });
 });
+
+
+
