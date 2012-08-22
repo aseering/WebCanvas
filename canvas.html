@@ -12,7 +12,7 @@
 <script src="/js/jquery.ui.touch.js"></script>
 <!-- <script src="/js/pdf.js"></script>-->
 <script language="JavaScript">
-PDFJS.pdfBug=true;
+//PDFJS.pdfBug=true;
 </script>
 <script src="/js/canvas_client.js"></script>
 
@@ -21,7 +21,11 @@ PDFJS.pdfBug=true;
 <canvas id="canvas" width="850" height="110" style="background-color: white;"></canvas>
 <br />
 <div id="toolbar">
-<div style="float: left;" id="clear_btn_div"><input type="button" id="clear_btn" value="Clear" /></div>
+<div style="float: left;" id="clear_btn_div">
+  <input type="button" id="clear_btn" value="Clear" />
+  <input type="button" id="rotate_left_btn" value="Rotate Left" />
+  <input type="button" id="rotate_right_btn" value="Rotate Right" />
+</div>
 <div style="float: right;">
   <input type="button" id="dl_img" value="Download" />
   <span style="display: none;" class="next_prev">

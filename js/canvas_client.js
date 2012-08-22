@@ -110,59 +110,117 @@ function PointDrawQueue(ctxt) {
   };
 }
 
-// Keep the canvas sized to the screen
-function resize_canvas(common_ctxt) {
-    var toolbar_height = 30;  // Arbitrary buffer for drawing the toolbar
-
-    var raw_width=850;
-    var raw_height=1100;
-    
-    var docOffset = $('body').offset();
-    console.log(docOffset);
-
-    var window_width=window.innerWidth - docOffset.left*2;
-    var window_height=window.innerHeight - toolbar_height - docOffset.top*2;
-    
-    var width_ratio = window_width/raw_width;
-    var height_ratio = window_height/raw_height;
-    
-    var ratio = Math.min(width_ratio, height_ratio);
-    
-    var new_width = raw_width * ratio;
-    var new_height = raw_height * ratio;
-    
-    $('#canvas').attr({ width: new_width, height: new_height });
-    $('#toolbar').width(new_width);
-    if (common_ctxt) common_ctxt.scale(ratio, ratio);
-
-    return ratio;
-}
-
-function setCanvas(ctxt) {
-    ctxt.strokeStyle = 'blue';
-    ctxt.lineWidth = 1;
-    ctxt.lineCap = "round";
-    ctxt.lineJoin = "round";
-    ctxt.shadowBlur = 3;
-    ctxt.shadowColor = 'blue';
-    ctxt.beginPath();
-}
-
 jQuery(document).ready(function(){
 
     var RAW_CANVAS_WIDTH=850;
     var RAW_CANVAS_HEIGHT=1100;
 
+    var ROTATED_CANVAS_WIDTH=RAW_CANVAS_WIDTH;
+    var ROTATED_CANVAS_HEIGHT=RAW_CANVAS_HEIGHT;
+
     var curr_scale = 1.0;
+    var curr_rot = 0;
+
+    function rotate_raw(pt, width, height, rot) {
+	if (!width) width = RAW_CANVAS_WIDTH;
+	if (!height) height = RAW_CANVAS_HEIGHT;
+	if (!rot) rot = curr_rot;
+	// Take a point in the RAW_CANVAS_* space
+	// and transform it onto the rotated canvas
+	if (rot == 0) {
+	    return pt;
+	} else if (rot == 1) {
+	    return {x: pt.y, y: width-pt.x};
+	} else if (rot == 2) {
+	    return {x: width-pt.x, y: height-pt.y};
+	} else if (rot == 3) {
+	    return {x: height-pt.y, y: pt.x};
+	} else {
+	    throw "PAD: Bad rotation position!  You've hit a bug!";
+	}
+    }
 
     var scratch_space = $('<div></div>').hide();
     $('body').append(scratch_space);
 
     var canvas = $('#canvas').get(0);
     var ctxt = canvas.getContext("2d");
+
+    function setCanvas() {
+	ctxt.strokeStyle = 'blue';
+	ctxt.lineWidth = 1;
+	ctxt.lineCap = "round";
+	ctxt.lineJoin = "round";
+	ctxt.shadowBlur = 3;
+	ctxt.shadowColor = 'blue';
+	ctxt.beginPath();
+    }
     ctxt.save();
-    curr_scale = resize_canvas(ctxt);
-    setCanvas(ctxt);
+    setCanvas();
+
+    function redrawFromServer() {
+	socket.emit('get_pagedata');
+    }
+    // Keep the canvas sized to the screen
+    function resize_canvas() {
+	var toolbar_height = 30;  // Arbitrary buffer for drawing the toolbar
+	
+	var raw_width=ROTATED_CANVAS_WIDTH;
+	var raw_height=ROTATED_CANVAS_HEIGHT;
+	
+	var docOffset = $('body').offset();
+	
+	var window_width=window.innerWidth - docOffset.left*2;
+	var window_height=window.innerHeight - toolbar_height - docOffset.top*2;
+	
+	var width_ratio = window_width/raw_width;
+	var height_ratio = window_height/raw_height;
+	
+	var ratio = Math.min(width_ratio, height_ratio);
+	
+	var new_width = raw_width * ratio;
+	var new_height = raw_height * ratio;
+
+	var new_size = { width: new_width, height: new_height };
+
+	$('#canvas').attr(new_size);
+	$('#toolbar').width(new_width);
+
+	ctxt.scale(ratio, ratio);
+
+	// Re-scale/rotate the canvas
+	var rot_origin = rotate_raw({x: 0, y: 0});
+	rot_origin = div_pc(rot_origin, 1);
+	ctxt.translate(rot_origin.x, rot_origin.y);
+
+	var rot_angle = Math.PI / 2 * -curr_rot;
+	ctxt.rotate(rot_angle);
+
+	console.log([curr_rot, rot_angle, rot_origin.x, rot_origin.y]);
+	
+	return ratio;
+    }
+    curr_scale = resize_canvas();
+
+    function rotate_frame(new_rot) {
+	// Resize the canvas
+	var new_canvas_size = {x: RAW_CANVAS_WIDTH, y: RAW_CANVAS_HEIGHT};
+	if (new_rot == 1 || new_rot == 3) {
+	    new_canvas_size = {x: new_canvas_size.y, y: new_canvas_size.x};
+	}
+	ROTATED_CANVAS_WIDTH = new_canvas_size.x;
+	ROTATED_CANVAS_HEIGHT = new_canvas_size.y;
+
+	// Assign the new rotation angle
+	curr_rot = new_rot;
+
+	// And apply a rotation (requires re-scaling)
+	curr_scale = resize_canvas();
+
+	// And, redraw the canvas too
+	setCanvas();
+	redrawFromServer();
+    }
 
     // Just in case there's a background image
     var bkgdImg = new Image();
@@ -172,8 +230,8 @@ jQuery(document).ready(function(){
 
     var pdfDoc = null;
 
-    bkgdImg.onload = function() { bkgdImgReady = true; bkgdImgAvailable = true; redraw(); }
-    bkgdImg.onerror = function() { bkgdImgReady = true; bkgdImgAvailable = false; redraw(); }
+    bkgdImg.onload = function() { bkgdImgReady = true; bkgdImgAvailable = true; setCanvas(); redraw(); }
+    bkgdImg.onerror = function() { bkgdImgReady = true; bkgdImgAvailable = false; setCanvas(); redraw(); }
 
     var notepad_name;
     var fast_switching_enabled = false;
@@ -238,8 +296,10 @@ jQuery(document).ready(function(){
     
     function handleMouseCoord(evt, obj) {
 	if (mousedown) {
-	    var data = {'x': (evt.pageX - obj.offsetLeft) / curr_scale,
-			'y': (evt.pageY - obj.offsetLeft) / curr_scale };
+	    var data = {'x': (evt.pageX - obj.offsetLeft),
+			'y': (evt.pageY - obj.offsetLeft) };
+	    data = div_pc(data, curr_scale);
+	    data = rotate_raw(data, ROTATED_CANVAS_WIDTH, ROTATED_CANVAS_HEIGHT, (4 - curr_rot)%4);
 	    sender.sendPt(data);
 	    draw_pt(curr_user_id, data);
 	}
@@ -406,8 +466,8 @@ jQuery(document).ready(function(){
     // Go set up our initial state
     socket.emit('set_notepad', notepad_name);
     socket.emit('get_userid');
-    socket.emit('get_pagedata');
-    
+    redrawFromServer();
+
     $('#canvas').mousedown(function(evt) {
 	socket.emit('mousedown_send');
 	count = 0;
@@ -434,6 +494,8 @@ jQuery(document).ready(function(){
 	clearCanvas(ctxt);
 	socket.emit('clear');
     });
+    $('#rotate_left_btn').click(function(evt) { rotate_frame( (curr_rot + 1)%4 ); } );
+    $('#rotate_right_btn').click(function(evt) { rotate_frame( (curr_rot + 3)%4 ); } );
 
     $('#dl_img').click(function(evt) {
 	document.location.href = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
@@ -480,7 +542,7 @@ jQuery(document).ready(function(){
 	});
     }
 
-    $(window).resize(function() { curr_scale = resize_canvas(ctxt); setCanvas(ctxt); redraw(); });
+    $(window).resize(function() { curr_scale = resize_canvas(); setCanvas(); redrawFromServer(); });
 });
 
 
