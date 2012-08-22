@@ -249,7 +249,9 @@ cnv.constructors.canvas = function() {
     this.clearCanvas = function() {
 	cnv.canvas.ctxt.closePath();
 	cnv.canvas.ctxt.beginPath();
-	cnv.canvas.ctxt.clearRect(0, 0, canvas.width, canvas.height);
+	// Just clobber everything.  Don't bother with elegance.
+	var size = Math.max(cnv.canvas.canvas.width, cnv.canvas.canvas.height) / cnv.canvas.curr_scale + 1;
+	cnv.canvas.ctxt.clearRect(0, 0, size, size);
     }
 
     this.redraw_from_server = function() {
