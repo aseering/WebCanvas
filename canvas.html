@@ -7,8 +7,12 @@
 <!-- <script type="text/javascript" src="https://getfirebug.com/firebug-lite.js"></script> -->
 
 <title>Canvas Drawing</title>
+
+<link rel="stylesheet" href="/js/color-picker/colorPicker.css" type="text/css" />
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<script src="/js/color-picker/jquery.colorPicker.js"></script>
 <script src="/js/jquery.ui.touch.js"></script>
 <!-- <script src="/js/pdf.js"></script>-->
 <script language="JavaScript">
@@ -25,6 +29,7 @@
   <input type="button" id="clear_btn" value="Clear" />
   <input type="button" id="rotate_left_btn" value="Rotate Left" />
   <input type="button" id="rotate_right_btn" value="Rotate Right" />
+  <input type="text" id="color_picker" value="#0000FF" width="10" />
 </div>
 <div style="float: right;">
   <input type="button" id="dl_img" value="Download" />

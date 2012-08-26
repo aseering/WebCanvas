@@ -38,6 +38,10 @@ function BatchPointSender(socket) {
 	    }
 	},
 
+	'sendColor': function(color) {
+	    socket.emit('color_send', color);
+	},
+
 	'sendMouseUp': function() {
 	    clearTimeout(timer);
 	    socket.emit('mousemove_send', queue);
@@ -168,15 +172,17 @@ cnv.constructors.canvas = function() {
 				(4-this.curr_rot)%4);
     };
 
-    this.setCanvasDefaults = function() {
-	this.ctxt.strokeStyle = 'blue';
+    this.setCanvas = function(color) {
+	this.ctxt.strokeStyle = color;
 	this.ctxt.lineWidth = 1;
 	this.ctxt.lineCap = "round";
 	this.ctxt.lineJoin = "round";
 	this.ctxt.shadowBlur = 3;
-	this.ctxt.shadowColor = 'blue';
+	this.ctxt.shadowColor = color;
 	this.ctxt.beginPath();
-    };
+    };	
+
+    this.setCanvasDefaults = function() { console.log(cnv.color_picker.getColor()); this.setCanvas(cnv.color_picker.getColor()); };
 
     this.redraw = function(from_server_async) {
 	if (from_server_async) {
@@ -470,6 +476,10 @@ cnv.constructors.draw = function() {
 	    data = div_pc(data, cnv.canvas.curr_scale);
 	    data = cnv.canvas.rotate_pt(data);
 
+	    var color = cnv.color_picker.getColor();
+	    cnv.io.sender.sendColor(color);
+	    cnv.canvas.setCanvas(color);
+
 	    cnv.io.sender.sendPt(data);
 	    parent_this.draw_pt(parent_this.curr_user_id, data);
 	}
@@ -645,3 +655,13 @@ cnv.constructors.downloader = function() {
 };
 cnv.downloader = new cnv.constructors.downloader();
 
+cnv.constructors.color_picker = function() {
+    this.getColor = function() {
+	return $('#color_picker').val();
+    };
+
+    $(document).ready(function() {
+	$('#color_picker').colorPicker();
+    });
+};
+cnv.color_picker = new cnv.constructors.color_picker();
