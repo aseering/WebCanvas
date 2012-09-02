@@ -42,6 +42,10 @@ function BatchPointSender(socket) {
 	    socket.emit('color_send', color);
 	},
 
+	'setColorChangeHandler': function(colorFn) {
+	    socket.on('color_recv', colorFn);
+	},
+
 	'sendMouseUp': function() {
 	    clearTimeout(timer);
 	    socket.emit('mousemove_send', queue);
@@ -65,53 +69,65 @@ function BatchPointSender(socket) {
     };
 }
 
-function PointDrawQueue(ctxt) {
-  return {
-      _points: [],
-      _tension: 6.0,
-      addPoint: function(pt) {
-          var points = this._points;
-          // Throw out invalid points silently
-          if (pt == null || pt.x == null || pt.y == null) { return; }
-	  // Throw out duplicate points
-	  if (points.length >= 1 && points[0].x == pt.x && points[0].y == pt.y) { return; }
+function PointDrawQueue(ctxt, color) {
+    if (color == null) {
+	color = "#0000FF";
+    }
+    return {
+	_points: [],
+	_tension: 6.0,
+	setColor: function(_color) { color = _color; },
+	addPoint: function(pt) {
+            var points = this._points;
+            // Throw out invalid points silently
+            if (pt == null || pt.x == null || pt.y == null) { return; }
+	    // Throw out duplicate points
+	    if (points.length >= 1 && points[0].x == pt.x && points[0].y == pt.y) { return; }
+	    
+	    points.unshift(pt);
+	    if (points.length > 4) {
+		points.pop();
+	    }
+	    
+	    ctxt.strokeStyle = color;
+	    ctxt.shadowColor = color;
 
-	  points.unshift(pt);
-	  if (points.length > 4) {
-	    points.pop();
-	  }
-
-	  if (points.length <= 1) {
-	    // Nothing we can do
-	  } else if (points.length == 2) {
-            // If we just have two points, draw a line, to get things moving
-	    ctxt.moveTo(points[0].x, points[0].y);
-            ctxt.lineTo(points[1].x, points[1].y);
-	    ctxt.stroke();
-	  } else if (points.length == 3) {
-	    // If we have three points, skip a point;
-            // we have to accumulate a point to start doing curvingness
-	  } else {
-	    B = bezier_pts(this._points, this._tension);
-	    ctxt.moveTo(B[0].x, B[0].y);
-	    ctxt.bezierCurveTo(B[1].x, B[1].y, B[2].x, B[2].y, B[3].x, B[3].y);
-	    ctxt.stroke();
-	  }
-    },
-      flush: function() {
-        var points = this._points;
-        if (points.length > 2) {
-	  ctxt.moveTo(points[0].x, points[0].y);
-	  ctxt.lineTo(points[1].x, points[1].y);
-	  ctxt.stroke();
-        } else if (points.length <= 2 && points.length > 0) {
-	  ctxt.moveTo(points[0].x, points[0].y);
-	  ctxt.arc(points[0].x, points[0].y, 1, Math.PI*2, 0, true);
-	  ctxt.stroke();
+	    if (points.length <= 1) {
+		// Nothing we can do
+	    } else if (points.length == 2) {
+		// If we just have two points, draw a line, to get things moving
+		
+		ctxt.moveTo(points[0].x, points[0].y);
+		ctxt.lineTo(points[1].x, points[1].y);
+		ctxt.stroke();
+	    } else if (points.length == 3) {
+		// If we have three points, skip a point;
+		// we have to accumulate a point to start doing curvingness
+	    } else {
+		B = bezier_pts(this._points, this._tension);
+		ctxt.moveTo(B[0].x, B[0].y);
+		ctxt.bezierCurveTo(B[1].x, B[1].y, B[2].x, B[2].y, B[3].x, B[3].y);
+		ctxt.stroke();
+	    }
+	},
+	flush: function() {
+            var points = this._points;
+	    
+	    ctxt.strokeStyle = color;
+	    ctxt.shadowColor = color;
+            
+	    if (points.length > 2) {
+		ctxt.moveTo(points[0].x, points[0].y);
+		ctxt.lineTo(points[1].x, points[1].y);
+		ctxt.stroke();
+            } else if (points.length <= 2 && points.length > 0) {
+		ctxt.moveTo(points[0].x, points[0].y);
+		ctxt.arc(points[0].x, points[0].y, 1, Math.PI*2, 0, true);
+		ctxt.stroke();
+	    }
+	    this._points = [];
 	}
-	this._points = [];
-      }
-  };
+    };
 }
 
 // Create the Canvas namespace/object
@@ -182,7 +198,7 @@ cnv.constructors.canvas = function() {
 	this.ctxt.beginPath();
     };	
 
-    this.setCanvasDefaults = function() { console.log(cnv.color_picker.getColor()); this.setCanvas(cnv.color_picker.getColor()); };
+    this.setCanvasDefaults = function() { this.setCanvas('#0000FF'/*cnv.color_picker.getColor()*/); };
 
     this.redraw = function(from_server_async) {
 	if (from_server_async) {
@@ -301,7 +317,11 @@ cnv.constructors.canvas = function() {
 		cnv.draw.point_queues[user_id] = null;
 		cnv.canvas.ctxt.closePath();
 		cnv.canvas.ctxt.beginPath();
+	    },
+	    'c': function(user_id, color) {
+		cnv.draw.set_color(user_id, color);
 	    }
+
 	};
 
 	var val, fn;
@@ -430,7 +450,7 @@ cnv.constructors.bkgd_img = function() {
     this.bkgdImg.onload = function() {
 	parent_this.bkgdImgReady = true;
 	parent_this.bkgdImgAvailable = true;
-	cnv.canvas.setCanvas();
+	cnv.canvas.setCanvasDefaults();
 	cnv.canvas.redraw();
     }
     this.bkgdImg.onerror = function() {
@@ -469,6 +489,14 @@ cnv.constructors.draw = function() {
 	parent_this.point_queues[user_id].addPoint(pt);
     };
 
+    this.set_color = function(user_id, color) {
+	if (parent_this.point_queues[user_id] == null) {
+	    parent_this.point_queues[user_id] = PointDrawQueue(cnv.canvas.ctxt);
+	}
+	parent_this.point_queues[user_id].setColor(color);
+    };
+
+    this.curr_color = null;
     this.handleMouseCoord = function(evt, obj) {
 	if (cnv.io.mousedown) {
 	    var data = {'x': (evt.pageX - obj.offsetLeft),
@@ -477,10 +505,13 @@ cnv.constructors.draw = function() {
 	    data = cnv.canvas.rotate_pt(data);
 
 	    var color = cnv.color_picker.getColor();
-	    cnv.io.sender.sendColor(color);
-	    cnv.canvas.setCanvas(color);
+	    if (color != this.curr_color) {
+		this.curr_color = color;
+		cnv.io.sender.sendColor(color);
+	    }
 
 	    cnv.io.sender.sendPt(data);
+	    parent_this.set_color(parent_this.curr_user_id, color);
 	    parent_this.draw_pt(parent_this.curr_user_id, data);
 	}
     };
@@ -509,6 +540,8 @@ cnv.constructors.draw = function() {
 	cnv.canvas.ctxt.closePath();
 	cnv.canvas.ctxt.beginPath();
     });
+
+    cnv.io.sender.setColorChangeHandler(this.setColor);
 
     cnv.io.socket.on('send_userid', function (user_id) {
 	cnv.draw.curr_user_id = user_id;
@@ -552,6 +585,7 @@ cnv.constructors.draw = function() {
 	});
 	
 	$('#clear_btn').click(function(evt) {
+	    if (!confirm("Are you sure you want to clear this entire drawing?")) { return; }
 	    cnv.canvas.clearCanvas();
 	    cnv.io.socket.emit('clear');
 	});
@@ -599,6 +633,7 @@ cnv.constructors.multipage = function() {
     }
 
     $(document).ready(function() {
+	if (notepad_pagesep == -1) return;
 	$('.next_prev').show();
 	$('#prev_pg').click(function(evt) {
 	    if (cnv.notepad.notepad_pagenum > 0) {

@@ -126,4 +126,9 @@ io.sockets.on('connection', function(socket) {
         roomQueue.emit(this_notename, ['mouseup_recv', this_user_id]);
 	db.lpush(this_notename, JSON.stringify(['u', this_user_id]));
     });
+
+    socket.on('color_send', function(data) {
+	roomQueue.emit(this_notename, ['color_recv', this_user_id, data]);
+	db.lpush(this_notename, JSON.stringify(['c', this_user_id, data]));
+    });
 });
