@@ -1,0 +1,5 @@
+To run:  "nodejs canvas_test.js"
+
+This will start up a nodejs server.  Connect to it with one HTML5-capable browser to get a document URL; then open that URL up in several other browsers to share the document.
+
+
