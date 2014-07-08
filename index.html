@@ -7,8 +7,8 @@ var url_chars = [];
 for (var i = 0; i < 10; i++) {
   url_chars.push(chars.charAt(Math.floor(Math.random() * chars.length)));		  
 }
-window.location.hash = url_chars.join('');
-window.location.pathname = "/pad/";
+//window.location.hash = url_chars.join('');
+window.location.pathname = "/pad/" + url_chars.join('');
 </script>
 </head>
 <body></body>
