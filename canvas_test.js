@@ -10,15 +10,15 @@ app.listen(8081);
 var user_id = 0;
 
 app.get('/', function (req, res) {
-    res.sendfile(__dirname + '/index.html');
+    res.sendfile('index.html', {root: __dirname});
 });
 
 app.get('/pad/', function(req, res) {
-    res.sendfile(__dirname + '/canvas.html');
+    res.sendfile('canvas.html', {root: __dirname});
 });
 
 app.get('/pad/:id', function(req, res) {
-    res.sendfile(__dirname + '/canvas.html');
+    res.sendfile('canvas.html', {root: __dirname});
 });
 
 app.use('/js', express.static(__dirname + '/js'));
