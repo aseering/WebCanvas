@@ -1,6 +1,6 @@
 var express = require('express'),
 app = express.createServer(),
-io = require('socket.io').listen(app, {log: true}),
+io = require('socket.io').listen(app, {log: false}),
 fs = require('fs'),
 redis = require('redis'),
 db = redis.createClient();
